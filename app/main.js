@@ -26,7 +26,7 @@ const server = createServer((connection) => {
       case "set":
         const key = splitData[4];
         const value = splitData[6];
-        let extra = splitData[8];
+        const extra = splitData[8];
 
         if (extra && extra.toLowerCase() === "px") {
           const time = Number(splitData[10]);
@@ -53,10 +53,11 @@ const server = createServer((connection) => {
         }
         break;
       case "info":
-        extra = splitData[4];
-        if (extra && extra.toLowerCase() == "replication") {
+        const extraInfo = splitData[4];
+        if (extraInfo && extraInfo.toLowerCase() == "replication") {
           connection.write(`$11\r\nrole:master\r\n`);
         }
+        break;
     }
   });
 });
