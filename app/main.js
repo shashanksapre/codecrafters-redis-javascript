@@ -75,6 +75,7 @@ const server = createServer((connection) => {
         break;
       case "psync":
         connection.write(`+FULLRESYNC ${replId} 0\r\n`);
+        connection.write(`$12\r\nhello_world!`);
         break;
       default:
         console.log(`Received: ${data.toString()}`);
