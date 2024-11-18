@@ -9,6 +9,9 @@ const server = net.createServer((connection) => {
     if (data.toString() == "*1\r\n$4\r\nPING\r\n") {
       connection.write("+PONG\r\n");
     }
+    if (data.toString().startsWith("*2\r\n$4\r\nECHO\r\n")) {
+      connection.write(data.toString().split("*2\r\n$4\r\nECHO\r\n")[1]);
+    }
   });
 });
 
