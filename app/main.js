@@ -18,6 +18,7 @@ const rdbFile =
   "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==";
 
 let store = [];
+const replicaList = [];
 
 // Uncomment this block to pass the first stage
 const server = createServer((connection) => {
@@ -51,6 +52,11 @@ const server = createServer((connection) => {
           store.push({ key, value });
           connection.write("+OK\r\n");
         }
+        if (replicaList[0]) {
+          for (const replicaConnection of replicaList) {
+            replicaConnection.write(data);
+          }
+        }
         break;
       case "get":
         const keySearch = splitData[4];
@@ -81,6 +87,7 @@ const server = createServer((connection) => {
         const rdbFileBuffer = Buffer.from(rdbFile, "base64");
         connection.write(`$${rdbFileBuffer.length.toString()}\r\n`);
         connection.write(rdbFileBuffer);
+        replicaList.push(connection);
         break;
       default:
         console.log(`Received: ${data.toString()}`);
