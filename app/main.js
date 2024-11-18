@@ -12,12 +12,11 @@ const PORT = portIndex === -1 ? 6379 : process.argv[portIndex + 1];
 const serverRole =
   process.argv.indexOf("--replicaof") === -1 ? "master" : "slave";
 
-console.log(PORT);
-
 let store = [];
 
 // Uncomment this block to pass the first stage
 const server = createServer((connection) => {
+  const replId = v4();
   connection.on("data", (data) => {
     const splitData = data.toString().split("\r\n");
     const command = splitData[2];
@@ -63,7 +62,9 @@ const server = createServer((connection) => {
         const extraInfo = splitData[4];
         if (extraInfo && extraInfo.toLowerCase() == "replication") {
           connection.write(
-            `$${5 + serverRole.length}\r\nrole:${serverRole}\r\n`
+            `$${5 + serverRole.length}\r\nrole:${serverRole}\r\n$${
+              14 + replId.length
+            }\r\nmaster_replid:${replId}\r\n$20\r\nmaster_repl_offset:0\r\n`
           );
         }
         break;
