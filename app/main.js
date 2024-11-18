@@ -14,6 +14,9 @@ const serverRole =
 
 const master = process.argv[process.argv.indexOf("--replicaof") + 1];
 
+const rdbFile =
+  "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==";
+
 let store = [];
 
 // Uncomment this block to pass the first stage
@@ -75,7 +78,7 @@ const server = createServer((connection) => {
         break;
       case "psync":
         connection.write(`+FULLRESYNC ${replId} 0\r\n`);
-        connection.write(`$12\r\nhello_world!`);
+        connection.write(`$12\r\n${rdbFile}`);
         break;
       default:
         console.log(`Received: ${data.toString()}`);
