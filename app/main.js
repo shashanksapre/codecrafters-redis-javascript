@@ -73,6 +73,9 @@ const server = createServer((connection) => {
       case "replconf":
         connection.write("+OK\r]n");
         break;
+      case "psync":
+        connection.write("+OK\r]n");
+        break;
       default:
         console.log(`Received: ${data.toString()}`);
     }
@@ -83,16 +86,31 @@ server.listen(PORT, "127.0.0.1", () => {
   if (serverRole === "slave") {
     const host = master.split(" ")[0];
     const port = master.split(" ")[1];
-    const client = createConnection(port, host, () => {
-      client.write("*1\r\n$4\r\nPING\r\n");
-    });
+    const client = createConnection(port, host);
+    let replConf = 1;
+
     client.on("data", (data) => {
-      client.write(
-        `*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n${PORT}\r\n`
-      );
-      client.write(`*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n`);
-      client.write(`*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n`);
-      client.end();
+      const splitData = data.toString().split("\r\n");
+      console.log(replConf);
+      switch (splitData[0].toLowerCase()) {
+        case "+pong":
+          client.write(
+            `*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n${PORT}\r\n`
+          );
+          replConf = 2;
+          break;
+        case "+ok":
+          if (replConf === 2) {
+            client.write(
+              `*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n`
+            );
+            replConf = 3;
+          } else if (replConf === 3) {
+            client.write(`*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n`);
+          }
+          break;
+      }
     });
+    client.write("*1\r\n$4\r\nPING\r\n");
   }
 });
