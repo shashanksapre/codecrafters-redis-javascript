@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import { createServer } from "net";
+import { createServer, createConnection } from "net";
 import { v4 } from "uuid";
 
 config();
@@ -11,6 +11,8 @@ const portIndex = process.argv.indexOf("--port");
 const PORT = portIndex === -1 ? 6379 : process.argv[portIndex + 1];
 const serverRole =
   process.argv.indexOf("--replicaof") === -1 ? "master" : "slave";
+
+const master = process.argv[process.argv.indexOf("--replicaof") + 1];
 
 let store = [];
 
@@ -75,5 +77,12 @@ const server = createServer((connection) => {
     }
   });
 });
+
+if (serverRole === "slave") {
+  const host = master.split(" ")[0];
+  const port = master.split(" ")[1];
+  const client = createConnection(port, host);
+  client.write("*1\r\n$4\r\nPING\r\n");
+}
 
 server.listen(PORT, "127.0.0.1");
