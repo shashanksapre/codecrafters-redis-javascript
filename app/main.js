@@ -67,8 +67,8 @@ const server = createServer((connection) => {
           // connection.write(`$20\r\nmaster_repl_offset:0\r\n`);
           connection.write(
             `$${
-              35 + replId.length
-            }\r\nmaster_replid:${replId}\rmaster_repl_offset:0\r\n`
+              41 + serverRole.length + replId.length
+            }\r\nrole:${serverRole}\rmaster_replid:${replId}\rmaster_repl_offset:0\r\n`
           );
         }
         break;
