@@ -79,7 +79,8 @@ const server = createServer((connection) => {
       case "psync":
         connection.write(`+FULLRESYNC ${replId} 0\r\n`);
         const rdbFileBuffer = Buffer.from(rdbFile, "base64");
-        connection.write(`$${rdbFileBuffer.length}\r\n${rdbFileBuffer}`);
+        connection.write(`$${rdbFileBuffer.length.toString()}\r\n`);
+        connection.write(rdbFileBuffer);
         break;
       default:
         console.log(`Received: ${data.toString()}`);
