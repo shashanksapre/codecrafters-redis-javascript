@@ -7,6 +7,11 @@ config();
 // You can use print statements as follows for debugging, they'll be visible when running tests.
 console.log("Logs from your program will appear here!");
 
+const portIndex = process.argv.indexOf("--port");
+const PORT = portIndex === -1 ? 6379 : process.argv[portIndex];
+const serverRole =
+  process.argv.indexOf("--replicaof") === -1 ? "master" : "slave";
+
 let store = [];
 
 // Uncomment this block to pass the first stage
@@ -55,20 +60,13 @@ const server = createServer((connection) => {
       case "info":
         const extraInfo = splitData[4];
         if (extraInfo && extraInfo.toLowerCase() == "replication") {
-          connection.write(`$11\r\nrole:master\r\n`);
+          connection.write(
+            `$${5 + serverRole.length}\r\nrole:${serverRole}\r\n`
+          );
         }
         break;
     }
   });
 });
 
-// const server2 = createServer((conn) => {});
-
-// server.listen(6379, "127.0.0.1");
-
-server.listen(
-  process.argv.indexOf("--port") === -1
-    ? 6379
-    : process.argv[process.argv.indexOf("--port") + 1],
-  "127.0.0.1"
-);
+server.listen(PORT, "127.0.0.1");
