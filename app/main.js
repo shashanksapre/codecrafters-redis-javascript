@@ -81,13 +81,10 @@ if (serverRole === "slave") {
   const port = master.split(" ")[1];
   const client = createConnection(port, host);
   client.write("*1\r\n$4\r\nPING\r\n");
-  client.end();
   client.write(
     `*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n${PORT}\r\n`
   );
-  client.end();
   client.write(`*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n`);
-  client.end();
 }
 
 server.listen(PORT, "127.0.0.1");
