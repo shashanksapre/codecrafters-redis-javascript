@@ -12,6 +12,8 @@ const PORT = portIndex === -1 ? 6379 : process.argv[portIndex];
 const serverRole =
   process.argv.indexOf("--replicaof") === -1 ? "master" : "slave";
 
+console.log(PORT);
+
 let store = [];
 
 // Uncomment this block to pass the first stage
