@@ -72,6 +72,9 @@ const server = createServer((connection) => {
         break;
       case "replconf":
         connection.write("+OK\r]n");
+        break;
+      default:
+        console.log(`Received: ${data.toString()}`);
     }
   });
 });
