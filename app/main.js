@@ -55,4 +55,13 @@ const server = createServer((connection) => {
   });
 });
 
-server.listen(process.env.PORT, "127.0.0.1");
+// const server2 = createServer((conn) => {});
+
+// server.listen(6379, "127.0.0.1");
+
+server.listen(
+  process.argv.indexOf("--port") === -1
+    ? 6379
+    : process.argv[process.argv.indexOf("--port") + 1],
+  "127.0.0.1"
+);
