@@ -63,10 +63,6 @@ const server = createServer((connection) => {
       case "info":
         const extraInfo = splitData[4];
         if (extraInfo && extraInfo.toLowerCase() == "replication") {
-          // connection.write(
-          //   `$${5 + serverRole.length}\r\nrole:${serverRole}\r\n`
-          // );
-          // connection.write(`$20\r\nmaster_repl_offset:0\r\n`);
           connection.write(
             `$${
               41 + serverRole.length + replId.length
@@ -74,6 +70,8 @@ const server = createServer((connection) => {
           );
         }
         break;
+      case "replconf":
+        connection.write("+OK\r]n");
     }
   });
 });
