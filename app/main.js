@@ -71,10 +71,10 @@ const server = createServer((connection) => {
         }
         break;
       case "replconf":
-        connection.write("+OK\r]n");
+        connection.write("+OK\r\n");
         break;
       case "psync":
-        connection.write("+OK\r]n");
+        connection.write("+OK\r\n");
         break;
       default:
         console.log(`Received: ${data.toString()}`);
@@ -91,7 +91,6 @@ server.listen(PORT, "127.0.0.1", () => {
 
     client.on("data", (data) => {
       const splitData = data.toString().split("\r\n");
-      console.log(replConf);
       switch (splitData[0].toLowerCase()) {
         case "+pong":
           client.write(
