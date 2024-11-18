@@ -16,7 +16,7 @@ let store = [];
 
 // Uncomment this block to pass the first stage
 const server = createServer((connection) => {
-  const replId = v4();
+  const replId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
   connection.on("data", (data) => {
     const splitData = data.toString().split("\r\n");
     const command = splitData[2];
