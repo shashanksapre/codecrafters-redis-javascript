@@ -8,7 +8,7 @@ config();
 console.log("Logs from your program will appear here!");
 
 const portIndex = process.argv.indexOf("--port");
-const PORT = portIndex === -1 ? 6379 : process.argv[portIndex];
+const PORT = portIndex === -1 ? 6379 : process.argv[portIndex + 1];
 const serverRole =
   process.argv.indexOf("--replicaof") === -1 ? "master" : "slave";
 
