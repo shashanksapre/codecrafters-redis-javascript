@@ -34,8 +34,6 @@ export function requestHandler(data, config) {
       } else {
         return "NULL";
       }
-    case "wait":
-      return config.replicaList.length;
     default:
       console.log(`Received: ${data.toString()}`);
       return "E";
@@ -43,10 +41,6 @@ export function requestHandler(data, config) {
 }
 
 export function responseHandler(response, conn) {
-  if (typeof response === "number") {
-    conn.write(`:${response}\r\n`);
-    return;
-  }
   switch (response) {
     case "PONG":
       conn.write("+PONG\r\n");

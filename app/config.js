@@ -8,6 +8,7 @@ const config = {
   masterPort: "",
   replicaList: [],
   offset: 0,
+  acks: 0,
 };
 
 export default config;

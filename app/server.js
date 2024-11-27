@@ -22,7 +22,11 @@ const createRedisServer = (config) => {
           }
           break;
         case "replconf":
-          conn.write("+OK\r\n");
+          if (splitData[4] && splitData[4].toLowerCase() === "ack") {
+            config.acks += 1;
+          } else {
+            conn.write("+OK\r\n");
+          }
           break;
         case "psync":
           const rdbFileBuffer = Buffer.from(rdbFile, "base64");
@@ -30,14 +34,35 @@ const createRedisServer = (config) => {
           conn.write(`$${rdbFileBuffer.length.toString()}\r\n`);
           conn.write(rdbFileBuffer);
           // conn.write("\r\n");
-          config.replicaList.push(conn);
+          // config.replicaList.push(conn);
+          config.replicaList.push({ conn, ack: 0 });
+          config.acks += 1;
+          break;
+        case "wait":
+          for (let i = 0; i < config.replicaList.length; i++) {
+            config.replicaList[i].conn.write(
+              "*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n"
+            );
+            config.replicaList[i].ack = 0;
+          }
+          if (config.acks >= Number(splitData[4])) {
+            conn.write(`:${config.acks}\r\n`);
+          }
+          setTimeout(() => {
+            conn.write(`:${config.acks}\r\n`);
+          }, Number(splitData[6]));
           break;
         default:
           const response = requestHandler(data, config);
           if (command === "set") {
-            for (const replicaConn of config.replicaList) {
-              replicaConn.write(data);
+            config.acks = 0;
+            for (let i = 0; i < config.replicaList.length; i++) {
+              config.replicaList[i].conn.write(data);
+              config.replicaList[i].ack = 0;
             }
+            // for (const replicaConn of config.replicaList) {
+            //   replicaConn.write(data);
+            // }
           }
           responseHandler(response, conn);
       }
@@ -56,7 +81,6 @@ const setUpSlave = (config) => {
   });
   let state = "PING";
   client.on("data", (data) => {
-    const splitData = data.toString().split("\r\n");
     switch (state) {
       case "PING":
         if (data.toString().toLowerCase().includes("pong")) {
