@@ -54,7 +54,7 @@ export function responseHandler(response, conn) {
       conn.write("$-1\r\n");
       break;
     case 0:
-      conn.write(0);
+      conn.write(":0\r\n");
       break;
     case "E":
       conn.write("-ERR unknown command\r\n");
