@@ -1,6 +1,6 @@
 let store = [];
 
-export function requestHandler(data) {
+export function requestHandler(data, config) {
   const splitData = data.toString().split("\r\n");
 
   const command = splitData[2];
@@ -35,7 +35,7 @@ export function requestHandler(data) {
         return "NULL";
       }
     case "wait":
-      return 0;
+      return config.replicaList.length;
     default:
       console.log(`Received: ${data.toString()}`);
       return "E";
@@ -43,6 +43,10 @@ export function requestHandler(data) {
 }
 
 export function responseHandler(response, conn) {
+  if (typeof response === "number") {
+    conn.write(`:${response}\r\n`);
+    return;
+  }
   switch (response) {
     case "PONG":
       conn.write("+PONG\r\n");
@@ -52,9 +56,6 @@ export function responseHandler(response, conn) {
       break;
     case "NULL":
       conn.write("$-1\r\n");
-      break;
-    case 0:
-      conn.write(":0\r\n");
       break;
     case "E":
       conn.write("-ERR unknown command\r\n");
