@@ -34,6 +34,8 @@ export function requestHandler(data) {
       } else {
         return "NULL";
       }
+    case "wait":
+      return 0;
     default:
       console.log(`Received: ${data.toString()}`);
       return "E";
@@ -50,6 +52,9 @@ export function responseHandler(response, conn) {
       break;
     case "NULL":
       conn.write("$-1\r\n");
+      break;
+    case 0:
+      conn.write(0);
       break;
     case "E":
       conn.write("-ERR unknown command\r\n");
