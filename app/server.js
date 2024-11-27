@@ -86,7 +86,11 @@ const setUpSlave = (config) => {
             .split("*")
             .filter((cmd) => cmd.length > 0);
           for (const command of commands) {
-            requestHandler("*" + command, config.store);
+            if (command.toLowerCase().includes("getack")) {
+              client.write("*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n");
+            } else {
+              requestHandler("*" + command, config.store);
+            }
           }
         }
         break;
