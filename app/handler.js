@@ -34,6 +34,14 @@ export function requestHandler(data, config) {
       } else {
         return "NULL";
       }
+    case "type":
+      const typeSearch = splitData[4];
+      const pair = store.find((data) => data.key === typeSearch);
+      if (pair) {
+        return [typeof pair.value];
+      } else {
+        return ["none"];
+      }
     default:
       console.log(`Received: ${data.toString()}`);
       return "E";
