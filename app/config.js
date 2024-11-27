@@ -7,6 +7,7 @@ const config = {
   masterHost: "",
   masterPort: "",
   replicaList: [],
+  offset: 0,
 };
 
 export default config;

@@ -25,14 +25,15 @@ const createRedisServer = (config) => {
           conn.write("+OK\r\n");
           break;
         case "psync":
-          conn.write(`+FULLRESYNC ${config.replicationId} 0\r\n`);
           const rdbFileBuffer = Buffer.from(rdbFile, "base64");
+          conn.write(`+FULLRESYNC ${config.replicationId} 0\r\n`);
           conn.write(`$${rdbFileBuffer.length.toString()}\r\n`);
           conn.write(rdbFileBuffer);
+          // conn.write("\r\n");
           config.replicaList.push(conn);
           break;
         default:
-          const response = requestHandler(data);
+          const response = requestHandler(data, config);
           if (command === "set") {
             for (const replicaConn of config.replicaList) {
               replicaConn.write(data);
@@ -83,13 +84,28 @@ const setUpSlave = (config) => {
         if (data.toString().toLowerCase().includes("*")) {
           const commands = data
             .toString()
-            .split("*")
+            .split("*3")
             .filter((cmd) => cmd.length > 0);
           for (const command of commands) {
-            if (command.toLowerCase().includes("getack")) {
-              client.write("*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n");
+            if (
+              command.includes("FULLRESYNC") ||
+              command.includes("redis-bits")
+            ) {
+              // Do something with the rdb file
+            } else if (command.toLowerCase().includes("getack")) {
+              client.write(
+                `*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$${
+                  config.offset.toString().length
+                }\r\n${config.offset}\r\n`
+              );
+              config.offset = config.offset + 2 + command.length;
             } else {
-              requestHandler("*" + command, config.store);
+              requestHandler(command, config.store);
+              if (command.includes("*")) {
+                config.offset = config.offset + command.length;
+              } else {
+                config.offset = config.offset + 2 + command.length;
+              }
             }
           }
         }
