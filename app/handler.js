@@ -87,6 +87,7 @@ export function requestHandler(data, config) {
       }
       if (inputStreamId === "*") {
         // Generate timestamp and sequence number
+        newStreamId = `${Date.now()}-0`;
       } else {
         const inputStreamIdSplit = inputStreamId.split("-");
         timestamp = inputStreamIdSplit[0];
