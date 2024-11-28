@@ -1,3 +1,5 @@
+/** @typedef {import('node:net').Socket} Connection */
+
 /**
  * @typedef {Object} StoreData
  * @property {string} key - key
@@ -35,10 +37,10 @@ export function requestHandler(data, config) {
 
   switch (command.toLowerCase()) {
     case "ping":
-      return "PONG";
+      return { type: "simple", data: "PONG" };
     case "echo":
       const arg = splitData[4];
-      return arg;
+      return { type: "bulk", data: arg };
     case "set":
       const key = splitData[4];
       const value = splitData[6];
@@ -53,25 +55,25 @@ export function requestHandler(data, config) {
       } else {
         store.push({ key, value });
       }
-      return "OK";
+      return { type: "simple", data: "OK" };
     case "get":
       const keySearch = splitData[4];
       const keyValuePair = store.find((data) => data.key === keySearch);
       if (keyValuePair) {
-        return keyValuePair.value;
+        return { type: "bulk", data: keyValuePair.value };
       } else {
-        return "NULL";
+        return { type: "null", data: "-1" };
       }
     case "type":
       const typeSearch = splitData[4];
       const pair = store.find((data) => data.key === typeSearch);
       const str = streams.find((data) => data.streamKey === typeSearch);
       if (pair) {
-        return typeof pair.value;
+        return { type: "simple", data: typeof pair.value };
       } else if (str) {
-        return "stream";
+        return { type: "simple", data: "stream" };
       } else {
-        return "none";
+        return { type: "simple", data: "none" };
       }
     case "xadd":
       const streamKey = splitData[4];
@@ -107,18 +109,39 @@ export function requestHandler(data, config) {
         } else {
           // Use Id as is
           if (inputStreamIdSplit[0] == 0 && inputStreamIdSplit[1] == 0) {
-            return "E:GreaterThan0-0";
+            return {
+              type: "error",
+              data: {
+                code: "E1",
+                description:
+                  "The ID specified in XADD must be greater than 0-0",
+              },
+            };
           }
           if (stream) {
             const lastStreamIdSplit = lastStreamId.split("-");
             if (lastStreamIdSplit[0] > inputStreamIdSplit[0]) {
-              return "E:GreaterThanPrevious";
+              return {
+                type: "error",
+                data: {
+                  code: "E2",
+                  description:
+                    "The ID specified in XADD is equal or smaller than the target stream top item",
+                },
+              };
             }
             if (
               lastStreamIdSplit[0] == inputStreamIdSplit[0] &&
               lastStreamIdSplit[1] >= inputStreamIdSplit[1]
             ) {
-              return "E:GreaterThanPrevious";
+              return {
+                type: "error",
+                data: {
+                  code: "E2",
+                  description:
+                    "The ID specified in XADD is equal or smaller than the target stream top item",
+                },
+              };
             }
           }
           newStreamId = inputStreamId;
@@ -137,7 +160,7 @@ export function requestHandler(data, config) {
           stream: [...stream.stream, { streamId: newStreamId, streamData }],
         });
       }
-      return newStreamId;
+      return { type: "bulk", data: newStreamId };
     case "xrange":
       const streamRangeKey = splitData[4];
       let startId = splitData[6];
@@ -173,76 +196,156 @@ export function requestHandler(data, config) {
               Number(stream.streamId.split("-")[1]) <= Number(endIdSplit[1])
           );
         }
-        return returnValue;
+        return { type: "xrange", data: returnValue };
       } else {
-        return "NULL";
+        return { type: "null", data: "-1" };
       }
     case "xread":
-      const streamReadKey = splitData[6];
-      const readId = splitData[8];
-      const existingStreamRead = streams.find(
-        (stream) => stream.streamKey === streamReadKey
+      let parsedData = splitData.filter(
+        (data) => !data.startsWith("*") && !data.startsWith("$") && data !== ""
       );
-      let readValue;
-      if (existingStreamRead) {
-        const readIdSplit = readId.split("-");
-        readValue = existingStreamRead.stream.filter(
-          (stream) =>
-            Number(stream.streamId.split("-")[0]) >= Number(readIdSplit[0])
-        );
-        if (readIdSplit[1]) {
-          readValue = readValue.filter(
-            (stream) =>
-              Number(stream.streamId.split("-")[1]) > Number(readIdSplit[1])
-          );
-        }
-        return { streamKey: streamReadKey, stream: readValue };
-      } else {
-        return "NULL";
+      const streamArgs = parsedData.slice(parsedData.indexOf("streams") + 1);
+      const streamKeysLength = streamArgs.length / 2;
+      const streamKeysAndIds = [];
+      const streamReadResponse = [];
+      for (let i = 0; i < streamKeysLength; i++) {
+        streamKeysAndIds.push({
+          key: streamArgs[i],
+          id: streamArgs[i + streamKeysLength],
+        });
       }
+      streamKeysAndIds.forEach((keyAndId) => {
+        let readValue;
+        const stream = streams.find(
+          (stream) => stream.streamKey === keyAndId.key
+        );
+        if (stream) {
+          const readIdSplit = keyAndId.id.split("-");
+          readValue = stream.stream.filter(
+            (stream) =>
+              Number(stream.streamId.split("-")[0]) >= Number(readIdSplit[0])
+          );
+          if (readIdSplit[1]) {
+            readValue = readValue.filter(
+              (stream) =>
+                Number(stream.streamId.split("-")[1]) > Number(readIdSplit[1])
+            );
+          }
+          streamReadResponse.push({
+            streamKey: keyAndId.key,
+            stream: readValue,
+          });
+        }
+      });
+      return { type: "xread", data: streamReadResponse };
+    // const streamReadKey = splitData[6];
+    // const readId = splitData[8];
+    // const existingStreamRead = streams.find(
+    //   (stream) => stream.streamKey === streamReadKey
+    // );
+    // let readValue;
+    // if (existingStreamRead) {
+    //   const readIdSplit = readId.split("-");
+    //   readValue = existingStreamRead.stream.filter(
+    //     (stream) =>
+    //       Number(stream.streamId.split("-")[0]) >= Number(readIdSplit[0])
+    //   );
+    //   if (readIdSplit[1]) {
+    //     readValue = readValue.filter(
+    //       (stream) =>
+    //         Number(stream.streamId.split("-")[1]) > Number(readIdSplit[1])
+    //     );
+    //   }
+    //   return { streamKey: streamReadKey, stream: readValue };
+    // } else {
+    //   return "NULL";
+    // }
     default:
       console.log(`Received: ${data.toString()}`);
-      return "E:0";
+      return {
+        type: "error",
+        data: { code: "E0", description: "unknown command" },
+      };
   }
 }
 
+/**
+ * @typedef {Object} Response
+ * @property {string} type
+ * @property {Object} data
+ */
+
+/**
+ *
+ * @param {Response} response
+ * @param {Connection} conn
+ */
 export function responseHandler(response, conn) {
-  switch (response) {
-    case "PONG":
-    case "OK":
-    case "string":
-    case "stream":
-      conn.write(`+${response}\r\n`);
+  switch (response.type) {
+    case "simple":
+      conn.write(`+${response.data}\r\n`);
       break;
-    case "NULL":
+    case "bulk":
+      conn.write(`$${response.data.length}\r\n${response.data}\r\n`);
+      break;
+    case "null":
       conn.write("$-1\r\n");
       break;
-    case "E:0":
-      conn.write("-ERR unknown command\r\n");
+    case "error":
+      conn.write(`-ERR ${response.data.description}\r\n`);
       break;
-    case "E:GreaterThan0-0":
-      conn.write("-ERR The ID specified in XADD must be greater than 0-0\r\n");
+    case "xrange":
+      let xrangeResponse = response.data;
+      let rangeResponseString = `*${xrangeResponse.length}\r\n`;
+      for (let i = 0; i < xrangeResponse.length; i++) {
+        rangeResponseString +=
+          "*2\r\n" +
+          `$${xrangeResponse[i]["streamId"].length}\r\n` +
+          `${xrangeResponse[i]["streamId"]}\r\n` +
+          `*${xrangeResponse[i]["streamData"].length * 2}\r\n`;
+        for (let j = 0; j < xrangeResponse[i]["streamData"].length; j++) {
+          rangeResponseString +=
+            `$${xrangeResponse[i]["streamData"][j]["key"].length}\r\n` +
+            `${xrangeResponse[i]["streamData"][j]["key"]}\r\n` +
+            `$${xrangeResponse[i]["streamData"][j]["value"].length}\r\n` +
+            `${xrangeResponse[i]["streamData"][j]["value"]}\r\n`;
+        }
+      }
+      conn.write(rangeResponseString);
       break;
-    case "E:GreaterThanPrevious":
-      conn.write(
-        "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n"
-      );
+    case "xread":
+      let xreadResponse = response.data;
+      let readResponseString = `*${xreadResponse.length}\r\n`;
+      for (let i = 0; i < xreadResponse.length; i++) {
+        readResponseString +=
+          "*2\r\n" +
+          `$${xreadResponse[i]["streamKey"].length}\r\n` +
+          `${xreadResponse[i]["streamKey"]}\r\n` +
+          `*${xreadResponse[i]["stream"].length}\r\n`;
+        for (let j = 0; j < xreadResponse[i]["stream"].length; j++) {
+          readResponseString +=
+            `*2\r\n` +
+            `$${xreadResponse[i]["stream"][j]["streamId"].length}\r\n` +
+            `${xreadResponse[i]["stream"][j]["streamId"]}\r\n` +
+            `*${xreadResponse[i]["stream"][j]["streamData"].length * 2}\r\n`;
+          for (
+            let k = 0;
+            k < xreadResponse[i]["stream"][j]["streamData"].length;
+            k++
+          ) {
+            readResponseString +=
+              `$${xreadResponse[i]["stream"][j]["streamData"][k]["key"].length}\r\n` +
+              `${xreadResponse[i]["stream"][j]["streamData"][k]["key"]}\r\n` +
+              `$${xreadResponse[i]["stream"][j]["streamData"][k]["value"].length}\r\n` +
+              `${xreadResponse[i]["stream"][j]["streamData"][k]["value"]}\r\n`;
+          }
+        }
+      }
+      conn.write(readResponseString);
       break;
     default:
       let respString;
-      if (Array.isArray(response)) {
-        respString = `*${response.length}\r\n`;
-        for (let i = 0; i < response.length; i++) {
-          respString = `${respString}*2\r\n$${
-            response[i]["streamId"].length
-          }\r\n${response[i]["streamId"]}\r\n*${
-            response[i]["streamData"].length * 2
-          }\r\n`;
-          for (let j = 0; j < response[i]["streamData"].length; j++) {
-            respString = `${respString}$${response[i]["streamData"][j]["key"].length}\r\n${response[i]["streamData"][j]["key"]}\r\n$${response[i]["streamData"][j]["value"].length}\r\n${response[i]["streamData"][j]["value"]}\r\n`;
-          }
-        }
-      } else if (typeof response == "object") {
+      if (typeof response == "object") {
         respString = `*1\r\n*2\r\n$${response["streamKey"].length}\r\n${response["streamKey"]}\r\n`;
         for (let i = 0; i < response["stream"].length; i++) {
           respString = `${respString}*1\r\n*2\r\n$${
