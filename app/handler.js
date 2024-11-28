@@ -138,6 +138,37 @@ export function requestHandler(data, config) {
         });
       }
       return newStreamId;
+    case "xrange":
+      const streamSearchKey = splitData[4];
+      const startId = splitData[6];
+      const endId = splitData[8];
+      const existingStream = streams.find(
+        (stream) => stream.streamKey === streamSearchKey
+      );
+      if (existingStream) {
+        const startIdSplit = startId.split("-");
+        const endIdSplit = endId.split("-");
+        let returnValue = existingStream.stream.filter(
+          (stream) =>
+            Number(stream.streamId.split("-")[0]) >= Number(startIdSplit[0]) &&
+            Number(stream.streamId.split("-")[0]) <= Number(endIdSplit[0])
+        );
+        if (startIdSplit[1]) {
+          returnValue = returnValue.filter(
+            (stream) =>
+              Number(stream.streamId.split("-")[1]) >= Number(startIdSplit[1])
+          );
+        }
+        if (endIdSplit[1]) {
+          returnValue = returnValue.filter(
+            (stream) =>
+              Number(stream.streamId.split("-")[1]) <= Number(endIdSplit[1])
+          );
+        }
+        console.log(returnValue);
+      } else {
+        return "NULL";
+      }
     default:
       console.log(`Received: ${data.toString()}`);
       return "E:0";
