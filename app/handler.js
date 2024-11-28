@@ -139,11 +139,11 @@ export function requestHandler(data, config) {
       }
       return newStreamId;
     case "xrange":
-      const streamSearchKey = splitData[4];
+      const streamRangeKey = splitData[4];
       let startId = splitData[6];
       let endId = splitData[8];
       const existingStream = streams.find(
-        (stream) => stream.streamKey === streamSearchKey
+        (stream) => stream.streamKey === streamRangeKey
       );
       if (existingStream) {
         let returnValue;
@@ -177,6 +177,29 @@ export function requestHandler(data, config) {
       } else {
         return "NULL";
       }
+    case "xread":
+      const streamReadKey = splitData[6];
+      const readId = splitData[8];
+      const existingStreamRead = streams.find(
+        (stream) => stream.streamKey === streamReadKey
+      );
+      let readValue;
+      if (existingStreamRead) {
+        const readIdSplit = readId.split("-");
+        readValue = existingStreamRead.stream.filter(
+          (stream) =>
+            Number(stream.streamId.split("-")[0]) >= Number(readIdSplit[0])
+        );
+        if (readIdSplit[1]) {
+          readValue = readValue.filter(
+            (stream) =>
+              Number(stream.streamId.split("-")[1]) > Number(readIdSplit[1])
+          );
+        }
+        return { streamKey: streamReadKey, stream: readValue };
+      } else {
+        return "NULL";
+      }
     default:
       console.log(`Received: ${data.toString()}`);
       return "E:0";
@@ -206,8 +229,9 @@ export function responseHandler(response, conn) {
       );
       break;
     default:
+      let respString;
       if (Array.isArray(response)) {
-        let respString = `*${response.length}\r\n`;
+        respString = `*${response.length}\r\n`;
         for (let i = 0; i < response.length; i++) {
           respString = `${respString}*2\r\n$${
             response[i]["streamId"].length
@@ -218,10 +242,22 @@ export function responseHandler(response, conn) {
             respString = `${respString}$${response[i]["streamData"][j]["key"].length}\r\n${response[i]["streamData"][j]["key"]}\r\n$${response[i]["streamData"][j]["value"].length}\r\n${response[i]["streamData"][j]["value"]}\r\n`;
           }
         }
-        conn.write(respString);
+      } else if (typeof response == "object") {
+        respString = `*1\r\n*2\r\n$${response["streamKey"].length}\r\n${response["streamKey"]}\r\n`;
+        for (let i = 0; i < response["stream"].length; i++) {
+          respString = `${respString}*1\r\n*2\r\n$${
+            response["stream"][i]["streamId"].length
+          }\r\n${response["stream"][i]["streamId"]}\r\n*${
+            response["stream"][i]["streamData"].length * 2
+          }\r\n`;
+          for (let j = 0; j < response["stream"][i]["streamData"].length; j++) {
+            respString = `${respString}$${response["stream"][i]["streamData"][j]["key"].length}\r\n${response["stream"][i]["streamData"][j]["key"]}\r\n$${response["stream"][i]["streamData"][j]["value"].length}\r\n${response["stream"][i]["streamData"][j]["value"]}\r\n`;
+          }
+        }
       } else {
-        conn.write(`$${response.length}\r\n${response}\r\n`);
+        respString = `$${response.length}\r\n${response}\r\n`;
       }
+      conn.write(respString);
       break;
   }
 }
