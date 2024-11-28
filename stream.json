@@ -1,0 +1,14 @@
+{
+  "streamKey": "apple",
+  "stream": [
+    {
+      "streamId": "0-1",
+      "streamData": [
+        {
+          "key": "foo",
+          "value": "bar"
+        }
+      ]
+    }
+  ]
+}

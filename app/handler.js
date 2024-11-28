@@ -1,4 +1,5 @@
 let store = [];
+let stream = [];
 
 export function requestHandler(data, config) {
   const splitData = data.toString().split("\r\n");
@@ -37,11 +38,33 @@ export function requestHandler(data, config) {
     case "type":
       const typeSearch = splitData[4];
       const pair = store.find((data) => data.key === typeSearch);
+      const str = stream.find((data) => data.streamKey === typeSearch);
       if (pair) {
         return [typeof pair.value];
+      } else if (str) {
+        return ["stream"];
       } else {
         return ["none"];
       }
+    case "xadd":
+      const streamKey = splitData[4];
+      const streamId = splitData[6];
+      const streamData = [];
+      for (let i = 8; i < splitData.length; i = i + 4) {
+        streamData.push({ key: splitData[i], value: splitData[i + 2] });
+      }
+      const sk = stream.find((data) => data.streamKey === streamKey);
+      if (!sk) {
+        stream.push({ streamKey, stream: { streamId, streamData } });
+      } else {
+        stream = stream
+          .filter((s) => s.streamKey !== streamKey)
+          .push({
+            streamKey,
+            stream: [...sk.stream, { streamId, streamData }],
+          });
+      }
+      return streamId;
     default:
       console.log(`Received: ${data.toString()}`);
       return "E";
