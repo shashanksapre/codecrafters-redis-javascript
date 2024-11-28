@@ -140,15 +140,23 @@ export function requestHandler(data, config) {
       return newStreamId;
     case "xrange":
       const streamSearchKey = splitData[4];
-      const startId = splitData[6];
-      const endId = splitData[8];
+      let startId = splitData[6];
+      let endId = splitData[8];
       const existingStream = streams.find(
         (stream) => stream.streamKey === streamSearchKey
       );
       if (existingStream) {
+        let returnValue;
+        if (startId === "-") {
+          startId = existingStream.stream[0].streamId;
+        }
+        if (endId === "+") {
+          endId =
+            existingStream.stream[existingStream.stream.length - 1].streamId;
+        }
         const startIdSplit = startId.split("-");
         const endIdSplit = endId.split("-");
-        let returnValue = existingStream.stream.filter(
+        returnValue = existingStream.stream.filter(
           (stream) =>
             Number(stream.streamId.split("-")[0]) >= Number(startIdSplit[0]) &&
             Number(stream.streamId.split("-")[0]) <= Number(endIdSplit[0])
