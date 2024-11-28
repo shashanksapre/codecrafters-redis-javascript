@@ -30,6 +30,44 @@ let store = [];
 /** @type {Stream[]} */
 let streams = [];
 
+function readStream(splitData) {
+  let parsedData = splitData.filter(
+    (data) => !data.startsWith("*") && !data.startsWith("$") && data !== ""
+  );
+  const streamArgs = parsedData.slice(parsedData.indexOf("streams") + 1);
+  const streamKeysLength = streamArgs.length / 2;
+  const streamKeysAndIds = [];
+  const streamReadResponse = [];
+  for (let i = 0; i < streamKeysLength; i++) {
+    streamKeysAndIds.push({
+      key: streamArgs[i],
+      id: streamArgs[i + streamKeysLength],
+    });
+  }
+  streamKeysAndIds.forEach((keyAndId) => {
+    let readValue;
+    const stream = streams.find((stream) => stream.streamKey === keyAndId.key);
+    if (stream) {
+      const readIdSplit = keyAndId.id.split("-");
+      readValue = stream.stream.filter(
+        (stream) =>
+          Number(stream.streamId.split("-")[0]) >= Number(readIdSplit[0])
+      );
+      if (readIdSplit[1]) {
+        readValue = readValue.filter(
+          (stream) =>
+            Number(stream.streamId.split("-")[1]) > Number(readIdSplit[1])
+        );
+      }
+      streamReadResponse.push({
+        streamKey: keyAndId.key,
+        stream: readValue,
+      });
+    }
+  });
+  return streamReadResponse;
+}
+
 export function requestHandler(data, config) {
   const splitData = data.toString().split("\r\n");
 
@@ -201,65 +239,29 @@ export function requestHandler(data, config) {
         return { type: "null", data: "-1" };
       }
     case "xread":
-      let parsedData = splitData.filter(
-        (data) => !data.startsWith("*") && !data.startsWith("$") && data !== ""
-      );
-      const streamArgs = parsedData.slice(parsedData.indexOf("streams") + 1);
-      const streamKeysLength = streamArgs.length / 2;
-      const streamKeysAndIds = [];
-      const streamReadResponse = [];
-      for (let i = 0; i < streamKeysLength; i++) {
-        streamKeysAndIds.push({
-          key: streamArgs[i],
-          id: streamArgs[i + streamKeysLength],
+      let streamReadResponse = [];
+      if (splitData[4].toLowerCase() === "block") {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            const resp = readStream(splitData);
+            if (resp[0] && resp.some((srr) => srr.stream[0])) {
+              resolve({ type: "xread", data: resp });
+            } else {
+              resolve({ type: "null", data: "-1" });
+            }
+          }, Number(splitData[6]));
         });
-      }
-      streamKeysAndIds.forEach((keyAndId) => {
-        let readValue;
-        const stream = streams.find(
-          (stream) => stream.streamKey === keyAndId.key
-        );
-        if (stream) {
-          const readIdSplit = keyAndId.id.split("-");
-          readValue = stream.stream.filter(
-            (stream) =>
-              Number(stream.streamId.split("-")[0]) >= Number(readIdSplit[0])
-          );
-          if (readIdSplit[1]) {
-            readValue = readValue.filter(
-              (stream) =>
-                Number(stream.streamId.split("-")[1]) > Number(readIdSplit[1])
-            );
-          }
-          streamReadResponse.push({
-            streamKey: keyAndId.key,
-            stream: readValue,
-          });
+      } else {
+        streamReadResponse = readStream(splitData);
+        if (
+          streamReadResponse[0] &&
+          streamReadResponse.every((srr) => srr.stream[0])
+        ) {
+          return { type: "xread", data: streamReadResponse };
+        } else {
+          return { type: "null", data: "-1" };
         }
-      });
-      return { type: "xread", data: streamReadResponse };
-    // const streamReadKey = splitData[6];
-    // const readId = splitData[8];
-    // const existingStreamRead = streams.find(
-    //   (stream) => stream.streamKey === streamReadKey
-    // );
-    // let readValue;
-    // if (existingStreamRead) {
-    //   const readIdSplit = readId.split("-");
-    //   readValue = existingStreamRead.stream.filter(
-    //     (stream) =>
-    //       Number(stream.streamId.split("-")[0]) >= Number(readIdSplit[0])
-    //   );
-    //   if (readIdSplit[1]) {
-    //     readValue = readValue.filter(
-    //       (stream) =>
-    //         Number(stream.streamId.split("-")[1]) > Number(readIdSplit[1])
-    //     );
-    //   }
-    //   return { streamKey: streamReadKey, stream: readValue };
-    // } else {
-    //   return "NULL";
-    // }
+      }
     default:
       console.log(`Received: ${data.toString()}`);
       return {

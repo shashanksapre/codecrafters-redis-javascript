@@ -55,17 +55,23 @@ const createRedisServer = (config) => {
           break;
         default:
           const response = requestHandler(data, config);
-          if (command === "set") {
-            config.acks = 0;
-            for (let i = 0; i < config.replicaList.length; i++) {
-              config.replicaList[i].conn.write(data);
-              config.replicaList[i].ack = 0;
+          if (response instanceof Promise) {
+            response.then((val) => {
+              responseHandler(val, conn);
+            });
+          } else {
+            if (command === "set") {
+              config.acks = 0;
+              for (let i = 0; i < config.replicaList.length; i++) {
+                config.replicaList[i].conn.write(data);
+                config.replicaList[i].ack = 0;
+              }
+              // for (const replicaConn of config.replicaList) {
+              //   replicaConn.write(data);
+              // }
             }
-            // for (const replicaConn of config.replicaList) {
-            //   replicaConn.write(data);
-            // }
+            responseHandler(response, conn);
           }
-          responseHandler(response, conn);
       }
     });
   });
