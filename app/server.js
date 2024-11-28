@@ -45,9 +45,9 @@ const createRedisServer = (config) => {
             );
             config.replicaList[i].ack = 0;
           }
-          if (config.acks >= Number(splitData[4])) {
-            conn.write(`:${config.acks}\r\n`);
-          }
+          // if (config.acks >= Number(splitData[4])) {
+          //   conn.write(`:${config.acks}\r\n`);
+          // }
           setTimeout(() => {
             conn.write(`:${config.acks}\r\n`);
           }, Number(splitData[6]));
