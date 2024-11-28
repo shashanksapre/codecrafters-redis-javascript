@@ -1,3 +1,10 @@
+/**
+ * @typedef {Object} StoreData
+ * @property {string} key - key
+ * @property {string} value - value
+ */
+
+/** @type {StoreData[]} */
 let store = [];
 
 /**
@@ -68,38 +75,68 @@ export function requestHandler(data, config) {
       }
     case "xadd":
       const streamKey = splitData[4];
-      const streamId = splitData[6];
+      const inputStreamId = splitData[6];
+      let timestamp, seqNumber, newStreamId, lastStreamId;
       const stream = streams.find((data) => data.streamKey === streamKey);
       const streamData = [];
       for (let i = 8; i < splitData.length; i = i + 4) {
         streamData.push({ key: splitData[i], value: splitData[i + 2] });
       }
-      const splitId = streamId.split("-");
-      if (splitId[0] == 0 && splitId[1] == 0) {
-        return "E:GreaterThan0-0";
+      if (stream) {
+        lastStreamId = stream.stream[stream.stream.length - 1].streamId;
       }
-      if (!stream) {
-        streams.push({ streamKey, stream: [{ streamId, streamData }] });
+      if (inputStreamId === "*") {
+        // Generate timestamp and sequence number
       } else {
-        const lastIdSplit =
-          stream.stream[stream.stream.length - 1].streamId.split("-");
-        const newIdSplit = streamId.split("-");
-        if (lastIdSplit[0] > newIdSplit[0]) {
-          return "E:GreaterThanPrevious";
+        const inputStreamIdSplit = inputStreamId.split("-");
+        timestamp = inputStreamIdSplit[0];
+        if (inputStreamIdSplit[1] === "*") {
+          // Generate sequence number
+          if (!stream) {
+            seqNumber = timestamp == 0 ? 1 : 0;
+          } else {
+            const lastStreamIdSplit = lastStreamId.split("-");
+            if (lastStreamIdSplit[0] == inputStreamIdSplit[0]) {
+              seqNumber = Number(lastStreamIdSplit[1]) + 1;
+            } else {
+              seqNumber = 0;
+            }
+          }
+          newStreamId = `${timestamp}-${seqNumber}`;
+        } else {
+          // Use Id as is
+          if (inputStreamIdSplit[0] == 0 && inputStreamIdSplit[1] == 0) {
+            return "E:GreaterThan0-0";
+          }
+          if (stream) {
+            const lastStreamIdSplit = lastStreamId.split("-");
+            if (lastStreamIdSplit[0] > inputStreamIdSplit[0]) {
+              return "E:GreaterThanPrevious";
+            }
+            if (
+              lastStreamIdSplit[0] == inputStreamIdSplit[0] &&
+              lastStreamIdSplit[1] >= inputStreamIdSplit[1]
+            ) {
+              return "E:GreaterThanPrevious";
+            }
+          }
+          newStreamId = inputStreamId;
         }
-        if (
-          lastIdSplit[0] == newIdSplit[0] &&
-          lastIdSplit[1] >= newIdSplit[1]
-        ) {
-          return "E:GreaterThanPrevious";
-        }
+      }
+
+      if (!stream) {
+        streams.push({
+          streamKey,
+          stream: [{ streamId: newStreamId, streamData }],
+        });
+      } else {
         streams = streams.filter((s) => s.streamKey !== streamKey);
         streams.push({
           streamKey,
-          stream: [...stream.stream, { streamId, streamData }],
+          stream: [...stream.stream, { streamId: newStreamId, streamData }],
         });
       }
-      return streamId;
+      return newStreamId;
     default:
       console.log(`Received: ${data.toString()}`);
       return "E:0";
