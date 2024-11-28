@@ -242,14 +242,26 @@ export function requestHandler(data, config) {
       let streamReadResponse = [];
       if (splitData[4].toLowerCase() === "block") {
         return new Promise((resolve) => {
-          setTimeout(() => {
-            const resp = readStream(splitData);
-            if (resp[0] && resp.some((srr) => srr.stream[0])) {
-              resolve({ type: "xread", data: resp });
-            } else {
-              resolve({ type: "null", data: "-1" });
-            }
-          }, Number(splitData[6]));
+          if (Number(splitData[6]) === 0) {
+            const pollStream = () => {
+              const resp = readStream(splitData);
+              if (resp[0] && resp.some((srr) => srr.stream[0])) {
+                resolve({ type: "xread", data: resp });
+              } else {
+                setTimeout(pollStream, 100);
+              }
+            };
+            pollStream();
+          } else {
+            setTimeout(() => {
+              const resp = readStream(splitData);
+              if (resp[0] && resp.some((srr) => srr.stream[0])) {
+                resolve({ type: "xread", data: resp });
+              } else {
+                resolve({ type: "null", data: "-1" });
+              }
+            }, Number(splitData[6]));
+          }
         });
       } else {
         streamReadResponse = readStream(splitData);
