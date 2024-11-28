@@ -67,11 +67,11 @@ export function requestHandler(data, config) {
       const pair = store.find((data) => data.key === typeSearch);
       const str = streams.find((data) => data.streamKey === typeSearch);
       if (pair) {
-        return [typeof pair.value];
+        return typeof pair.value;
       } else if (str) {
-        return ["stream"];
+        return "stream";
       } else {
-        return ["none"];
+        return "none";
       }
     case "xadd":
       const streamKey = splitData[4];
@@ -165,7 +165,7 @@ export function requestHandler(data, config) {
               Number(stream.streamId.split("-")[1]) <= Number(endIdSplit[1])
           );
         }
-        console.log(returnValue);
+        return returnValue;
       } else {
         return "NULL";
       }
@@ -178,10 +178,10 @@ export function requestHandler(data, config) {
 export function responseHandler(response, conn) {
   switch (response) {
     case "PONG":
-      conn.write("+PONG\r\n");
-      break;
     case "OK":
-      conn.write("+OK\r\n");
+    case "string":
+    case "stream":
+      conn.write(`+${response}\r\n`);
       break;
     case "NULL":
       conn.write("$-1\r\n");
@@ -199,7 +199,18 @@ export function responseHandler(response, conn) {
       break;
     default:
       if (Array.isArray(response)) {
-        conn.write(`+${response[0]}\r\n`);
+        let respString = `*${response.length}\r\n`;
+        for (let i = 0; i < response.length; i++) {
+          respString = `${respString}*2\r\n$${
+            response[i]["streamId"].length
+          }\r\n${response[i]["streamId"]}\r\n*${
+            response[i]["streamData"].length * 2
+          }\r\n`;
+          for (let j = 0; j < response[i]["streamData"].length; j++) {
+            respString = `${respString}$${response[i]["streamData"][j]["key"].length}\r\n${response[i]["streamData"][j]["key"]}\r\n$${response[i]["streamData"][j]["value"].length}\r\n${response[i]["streamData"][j]["value"]}\r\n`;
+          }
+        }
+        conn.write(respString);
       } else {
         conn.write(`$${response.length}\r\n${response}\r\n`);
       }
