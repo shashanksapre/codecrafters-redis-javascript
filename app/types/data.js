@@ -43,5 +43,6 @@
 /**
  * @typedef {Object} Multi
  * @property {boolean} isActive
+ * @property {Connection | null} conn
  * @property {Array<QueueItem>} queue
  */

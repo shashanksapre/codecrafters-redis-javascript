@@ -13,7 +13,7 @@ import multi from "./data/multi.js";
  */
 export function requestHandler(data, conn) {
   const command = data[0];
-  if (multi.isActive && command != "exec") {
+  if (multi.isActive && multi.conn === conn && command !== "exec") {
     multi.queue.push({ conn, data });
     return { type: "simple", data: "QUEUED" };
   } else {
@@ -256,12 +256,20 @@ export function requestHandler(data, conn) {
           }
         }
       case "multi":
+        if (multi.isActive && multi.conn !== conn) {
+          return {
+            type: "error",
+            data: { code: "E5", description: "MULTI nested" },
+          };
+        }
         multi.isActive = true;
+        multi.conn = conn; // Store the connection that started MULTI
         return { type: "simple", data: "OK" };
       case "exec":
-        if (multi.isActive) {
+        if (multi.isActive && multi.conn === conn) {
           if (multi.queue.length < 1) {
             multi.isActive = false;
+            multi.conn = null; // Clear the connection
             return { type: "empty", data: "0" };
           }
           for (const item of multi.queue) {
@@ -269,6 +277,7 @@ export function requestHandler(data, conn) {
             responseHandler(resp, item.conn);
           }
           multi.isActive = false;
+          multi.conn = null; // Clear the connection
         } else {
           return {
             type: "error",
