@@ -1,3 +1,5 @@
+/** @typedef {import('node:net').Socket} Connection */
+
 /**
  * @typedef {Object} StoreData
  * @property {string} key - key
@@ -30,4 +32,16 @@
 /**
  * @typedef {Object} Stream
  * @property {StreamData[]} data - The identifier for the stream (e.g., "apple")
+ */
+
+/**
+ * @typedef {object} QueueItem
+ * @property {Connection} conn
+ * @property {string[]} data
+ */
+
+/**
+ * @typedef {Object} Multi
+ * @property {boolean} isActive
+ * @property {Array<QueueItem>} queue
  */

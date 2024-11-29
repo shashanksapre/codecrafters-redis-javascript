@@ -56,7 +56,7 @@ const createRedisServer = (config) => {
           }
           break;
         default:
-          const response = requestHandler(parsedData, config);
+          const response = requestHandler(parsedData, conn);
           if (response.isActive) {
             response.conn = conn;
           } else if (response instanceof Promise) {

@@ -1,6 +1,9 @@
-const Multi = {
+import "../types/data.js";
+
+/** @type {Multi} */
+const multi = {
   isActive: false,
   queue: [],
 };
 
-export default Multi;
+export default multi;
