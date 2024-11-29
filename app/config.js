@@ -9,6 +9,8 @@ const config = {
   replicaList: [],
   offset: 0,
   acks: 0,
+  dir: "",
+  dbfilename: "",
 };
 
 export default config;

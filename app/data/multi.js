@@ -2,21 +2,6 @@
 
 import "../types/data.js";
 
-// /** @type {Multi} */
-// const multi = {
-//   clients: new Map(),
-//   addClient(conn) {
-//     this.clients.set(conn, {
-//       isActive: true,
-//       queue: [],
-//     });
-//   },
-
-// };
-
-// export default multi;
-
-// data/multi.js
 const multi = {
   clients: new Map(),
   /**

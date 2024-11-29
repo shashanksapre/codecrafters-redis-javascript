@@ -11,6 +11,20 @@ const createRedisServer = (config) => {
       const parsedData = parseRequest(data);
       const command = parsedData[0];
       switch (command) {
+        case "config":
+          let responseString = "";
+          switch (parsedData[1]) {
+            case "get":
+              if (parsedData[2] === "dir") {
+                responseString += `*2\r\n$3\r\ndir\r\n$${config.dir.length}\r\n${config.dir}\r\n`;
+              }
+              if (parsedData[2] === "dbfilename") {
+                responseString += `*2\r\n$3\r\ndir\r\n$${config.dbfilename.length}\r\n${config.dbfilename}\r\n`;
+              }
+              break;
+          }
+          conn.write(responseString);
+          break;
         case "info":
           const extraInfo = parsedData[1];
           if (extraInfo && extraInfo == "replication") {
