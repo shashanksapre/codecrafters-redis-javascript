@@ -1,5 +1,7 @@
 /** @typedef {import('node:net').Socket} Connection */
 
+import "./types/io.js";
+
 import store from "./data/store.js";
 import streams from "./data/streams.js";
 import block from "./data/block.js";
@@ -272,12 +274,13 @@ export function requestHandler(data, conn) {
             multi.conn = null; // Clear the connection
             return { type: "empty", data: "0" };
           }
-          for (const item of multi.queue) {
-            const resp = requestHandler(item.data);
-            responseHandler(resp, item.conn);
-          }
+          const resp = [];
           multi.isActive = false;
+          for (const item of multi.queue) {
+            resp.push(requestHandler(item.data, item.conn));
+          }
           multi.conn = null; // Clear the connection
+          return { type: "exec", data: resp };
         } else {
           return {
             type: "error",
@@ -296,7 +299,7 @@ export function requestHandler(data, conn) {
 
 /**
  *
- * @param {Response} response
+ * @param {ResponseBody} response
  * @param {Connection} conn
  */
 export function responseHandler(response, conn) {
@@ -367,6 +370,23 @@ export function responseHandler(response, conn) {
         }
       }
       conn.write(readResponseString);
+      break;
+    case "exec":
+      let execResponseString = `*${response.data.length}\r\n`;
+      for (let i = 0; i < response.data.length; i++) {
+        if (response.data[i].type === "int") {
+          execResponseString += `:${response.data[i].data}\r\n`;
+        }
+        if (response.data[i].type === "simple") {
+          execResponseString += `+${response.data[i].data}\r\n`;
+        }
+        if (response.data[i].type === "bulk") {
+          execResponseString += `$${
+            response.data[i].data.toString().length
+          }\r\n${response.data[i].data.toString()}\r\n`;
+        }
+      }
+      conn.write(execResponseString);
       break;
   }
 }
