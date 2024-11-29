@@ -1,4 +1,6 @@
 import { createServer, createConnection } from "node:net";
+
+import { parseRequest, parseSlaveRequest } from "./utils/parser.js";
 import { requestHandler, responseHandler } from "./handler.js";
 
 const createRedisServer = (config) => {
@@ -6,12 +8,12 @@ const createRedisServer = (config) => {
     "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==";
   const server = createServer((conn) => {
     conn.on("data", (data) => {
-      const splitData = data.toString().split("\r\n");
-      const command = splitData[2].toLowerCase();
+      const parsedData = parseRequest(data);
+      const command = parsedData[0];
       switch (command) {
         case "info":
-          const extraInfo = splitData[4];
-          if (extraInfo && extraInfo.toLowerCase() == "replication") {
+          const extraInfo = parsedData[1];
+          if (extraInfo && extraInfo == "replication") {
             conn.write(
               `$${
                 41 + config.role.length + config.replicationId.length
@@ -22,14 +24,14 @@ const createRedisServer = (config) => {
           }
           break;
         case "replconf":
-          if (splitData[4] && splitData[4].toLowerCase() === "ack") {
+          if (parsedData[1] && parsedData[1] === "ack") {
             config.acks += 1;
           } else {
             conn.write("+OK\r\n");
           }
           break;
         case "psync":
-          const rdbFileBuffer = Buffer.from(rdbFile, "base64");
+          const rdbFileBuffer = Buffer.from(rdbFile + "\r\n", "base64");
           conn.write(`+FULLRESYNC ${config.replicationId} 0\r\n`);
           conn.write(`$${rdbFileBuffer.length.toString()}\r\n`);
           conn.write(rdbFileBuffer);
@@ -45,16 +47,16 @@ const createRedisServer = (config) => {
             );
             config.replicaList[i].ack = 0;
           }
-          if (config.acks >= Number(splitData[4])) {
+          if (config.acks >= Number(parsedData[1])) {
             conn.write(`:${config.acks}\r\n`);
           } else {
             setTimeout(() => {
               conn.write(`:${config.acks}\r\n`);
-            }, Number(splitData[6]));
+            }, Number(parsedData[2]));
           }
           break;
         default:
-          const response = requestHandler(data, config);
+          const response = requestHandler(parsedData, config);
           if (response.isActive) {
             response.conn = conn;
           } else if (response instanceof Promise) {
@@ -87,59 +89,63 @@ const setUpSlave = (config) => {
   });
   let state = "PING";
   client.on("data", (data) => {
-    switch (state) {
-      case "PING":
-        if (data.toString().toLowerCase().includes("pong")) {
-          client.write(
-            `*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n${config.port}\r\n`
-          );
-          state = "REPLCONF1";
-        }
-        break;
-      case "REPLCONF1":
-        if (data.toString().toLowerCase().includes("ok")) {
-          client.write(
-            `*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n`
-          );
-          state = "REPLCONF2";
-        }
-        break;
-      case "REPLCONF2":
-        if (data.toString().toLowerCase().includes("ok")) {
-          client.write(`*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n`);
-          state = "PSYNC";
-        }
-        break;
-      case "PSYNC":
-        if (data.toString().toLowerCase().includes("*")) {
-          const commands = data
-            .toString()
-            .split("*3")
-            .filter((cmd) => cmd.length > 0);
-          for (const command of commands) {
-            if (
-              command.includes("FULLRESYNC") ||
-              command.includes("redis-bits")
-            ) {
-              // Do something with the rdb file
-            } else if (command.toLowerCase().includes("getack")) {
+    const parsedData = parseSlaveRequest(data);
+    for (const commands of parsedData) {
+      switch (state) {
+        case "PING":
+          if (commands.includes("pong")) {
+            client.write(
+              `*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n${config.port}\r\n`
+            );
+            state = "REPLCONF1";
+          }
+          break;
+        case "REPLCONF1":
+          if (commands.includes("ok")) {
+            client.write(
+              `*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n`
+            );
+            state = "REPLCONF2";
+          }
+          break;
+        case "REPLCONF2":
+          if (commands.includes("ok")) {
+            client.write(`*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n`);
+            state = "PSYNC";
+          }
+          break;
+        case "PSYNC":
+          if (
+            commands.includes("fullresync") ||
+            commands.includes("redis-bits")
+          ) {
+            // Do something with the rdb file
+          } else {
+            const command = parseRequest(commands);
+            if (command.includes("getack")) {
+              let commandLength = 4;
+              for (const data of command) {
+                commandLength +=
+                  1 + data.length.toString().length + 2 + data.length + 2;
+              }
               client.write(
                 `*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$${
                   config.offset.toString().length
                 }\r\n${config.offset}\r\n`
               );
-              config.offset = config.offset + 2 + command.length;
+              config.offset = config.offset + commandLength;
             } else {
-              requestHandler(command, config.store);
-              if (command.includes("*")) {
-                config.offset = config.offset + command.length;
-              } else {
-                config.offset = config.offset + 2 + command.length;
+              requestHandler(command);
+              let commandLength = 4;
+              for (const data of command) {
+                commandLength +=
+                  1 + data.length.toString().length + 2 + data.length + 2;
               }
+              config.offset = config.offset + commandLength;
             }
           }
-        }
-        break;
+          break;
+      }
     }
   });
 };

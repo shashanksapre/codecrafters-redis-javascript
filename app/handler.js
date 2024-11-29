@@ -1,155 +1,72 @@
 /** @typedef {import('node:net').Socket} Connection */
 
-/**
- * @typedef {Object} StoreData
- * @property {string} key - key
- * @property {string} value - value
- */
-
-/** @type {StoreData[]} */
-let store = [];
+import store from "./data/store.js";
+import streams from "./data/streams.js";
+import block from "./data/block.js";
+import { readStream } from "./serivices/stream.js";
 
 /**
- * @typedef {Object} KeyValue
- * @property {string} key - The key name
- * @property {string} value - The corresponding value
- */
-
-/**
- * @typedef {Object} StreamEntry
- * @property {string} streamId - The ID of the stream (e.g., "0-1")
- * @property {KeyValue[]} streamData - Array of key-value pairs in the stream
- */
-
-/**
- * @typedef {Object} Stream
- * @property {string} streamKey - The identifier for the stream (e.g., "apple")
- * @property {StreamEntry[]} stream - Array of stream entries
- */
-
-/** @type {Stream[]} */
-let streams = [];
-
-const block = {
-  isActive: false,
-  streams: null,
-  conn: null,
-  newOnly: false,
-};
-
-/**
- * @typedef {Object} Response
- * @property {string} type
- * @property {Object} data
- */
-
-/**
- * @param {string[]} streamArgs
- * @returns {Response}
- */
-function readStream(streamArgs, newOnly = false) {
-  const streamKeysLength = streamArgs.length / 2;
-  const streamKeysAndIds = [];
-  const streamReadResponse = [];
-  for (let i = 0; i < streamKeysLength; i++) {
-    streamKeysAndIds.push({
-      key: streamArgs[i],
-      id: streamArgs[i + streamKeysLength],
-    });
-  }
-  streamKeysAndIds.forEach((keyAndId) => {
-    let readValue;
-    const stream = streams.find((stream) => stream.streamKey === keyAndId.key);
-    if (stream) {
-      let readIdSplit;
-      readValue = stream.stream.filter(
-        (stream) => stream.streamId >= keyAndId.id
-      );
-      readIdSplit = keyAndId.id.split("-");
-      readValue = stream.stream.filter(
-        (stream) =>
-          Number(stream.streamId.split("-")[0]) >= Number(readIdSplit[0])
-      );
-      if (readIdSplit[1]) {
-        readValue = readValue.filter(
-          (stream) =>
-            (newOnly &&
-              Number(stream.streamId.split("-")[1]) >=
-                Number(readIdSplit[1])) ||
-            Number(stream.streamId.split("-")[1]) > Number(readIdSplit[1])
-        );
-      }
-      streamReadResponse.push({
-        streamKey: keyAndId.key,
-        stream: readValue,
-      });
-    }
-  });
-  return streamReadResponse;
-}
-
-/**
- * @param {Buffer} data
- * @param {*} config
+ * @param {string[]} data
  * @returns
  */
-export function requestHandler(data, config) {
-  const splitData = data.toString().split("\r\n");
-  const command = splitData[2];
-
-  switch (command.toLowerCase()) {
+export function requestHandler(data) {
+  const command = data[0];
+  switch (command) {
     case "ping":
       return { type: "simple", data: "PONG" };
     case "echo":
-      const arg = splitData[4];
+      const arg = data[1];
       return { type: "bulk", data: arg };
     case "set":
-      const key = splitData[4];
-      const value = splitData[6];
-      const extra = splitData[8];
+      const key = data[1];
+      const value = data[2];
+      const extra = data[3];
 
-      if (extra && extra.toLowerCase() === "px") {
-        const time = Number(splitData[10]);
-        store.push({ key, value });
+      if (extra && extra === "px") {
+        const time = Number(data[4]);
+        store.data.push({ key, value });
         setTimeout(() => {
-          store = store.filter((pair) => pair.key !== key);
+          store.data = store.data.filter((pair) => pair.key !== key);
         }, time);
       } else {
-        store.push({ key, value });
+        store.data.push({ key, value });
       }
       return { type: "simple", data: "OK" };
     case "incr":
-      const keyIncr = splitData[4];
-      const kvp = store.find((data) => data.key === keyIncr);
+      const keyIncr = data[1];
+      const kvp = store.data.find((data) => data.key === keyIncr);
       if (kvp) {
         if (!isNaN(kvp.value)) {
-          store = [
-            ...store.filter((data) => data.key != keyIncr),
+          store.data = [
+            ...store.data.filter((data) => data.key != keyIncr),
             { ...kvp, value: (Number(kvp.value) + 1).toString() },
           ];
           return { type: "int", data: Number(kvp.value) + 1 };
         } else {
           return {
             type: "error",
-            data: { code: "E3", description: "Not an interger" },
+            data: {
+              code: "E3",
+              description: "value is not an integer or out of range",
+            },
           };
         }
       } else {
-        store.push({ key: keyIncr, value: "1" });
+        store.data.push({ key: keyIncr, value: "1" });
         return { type: "int", data: 1 };
       }
     case "get":
-      const keySearch = splitData[4];
-      const keyValuePair = store.find((data) => data.key === keySearch);
+      const keySearch = data[1];
+      const keyValuePair = store.data.find((data) => data.key === keySearch);
       if (keyValuePair) {
         return { type: "bulk", data: keyValuePair.value };
       } else {
         return { type: "null", data: "-1" };
       }
     case "type":
-      const typeSearch = splitData[4];
-      const pair = store.find((data) => data.key === typeSearch);
-      const str = streams.find((data) => data.streamKey === typeSearch);
+      const typeSearch = data[1];
+      const pair = store.data.find((data) => data.key === typeSearch);
+      const str = streams.data.find((data) => data.streamKey === typeSearch);
       if (pair) {
         return { type: "simple", data: typeof pair.value };
       } else if (str) {
@@ -158,13 +75,13 @@ export function requestHandler(data, config) {
         return { type: "simple", data: "none" };
       }
     case "xadd":
-      const streamKey = splitData[4];
-      const inputStreamId = splitData[6];
+      const streamKey = data[1];
+      const inputStreamId = data[2];
       let timestamp, seqNumber, newStreamId, lastStreamId;
-      const stream = streams.find((data) => data.streamKey === streamKey);
+      const stream = streams.data.find((data) => data.streamKey === streamKey);
       const streamData = [];
-      for (let i = 8; i < splitData.length; i = i + 4) {
-        streamData.push({ key: splitData[i], value: splitData[i + 2] });
+      for (let i = 3; i < data.length; i = i + 2) {
+        streamData.push({ key: data[i], value: data[i + 1] });
       }
       if (stream) {
         lastStreamId = stream.stream[stream.stream.length - 1].streamId;
@@ -231,34 +148,34 @@ export function requestHandler(data, config) {
       }
 
       if (!stream) {
-        streams.push({
+        streams.data.push({
           streamKey,
           stream: [{ streamId: newStreamId, streamData }],
         });
       } else {
-        streams = streams.filter((s) => s.streamKey !== streamKey);
-        streams.push({
+        streams.data = streams.data.filter((s) => s.streamKey !== streamKey);
+        streams.data.push({
           streamKey,
           stream: [...stream.stream, { streamId: newStreamId, streamData }],
         });
       }
-      if (block.isActive && block.streams.includes(streamKey)) {
+      if (block.isActive && block.streamArgs.includes(streamKey)) {
         const blockReadResponse = readStream(
-          block.newOnly ? [streamKey, newStreamId] : block.streams,
+          block.newOnly ? [streamKey, newStreamId] : block.streamArgs,
           block.newOnly
         );
         responseHandler({ type: "xread", data: blockReadResponse }, block.conn);
         block.isActive = false;
-        block.streams = null;
+        block.streamArgs = null;
         block.newOnly = false;
         block.conn = null;
       }
       return { type: "bulk", data: newStreamId };
     case "xrange":
-      const streamRangeKey = splitData[4];
-      let startId = splitData[6];
-      let endId = splitData[8];
-      const existingStream = streams.find(
+      const streamRangeKey = data[1];
+      let startId = data[2];
+      let endId = data[3];
+      const existingStream = streams.data.find(
         (stream) => stream.streamKey === streamRangeKey
       );
       if (existingStream) {
@@ -294,13 +211,11 @@ export function requestHandler(data, config) {
         return { type: "null", data: "-1" };
       }
     case "xread":
-      let parsedData = splitData.filter(
-        (data) => !data.startsWith("*") && !/\$[0-9]+/.test(data) && data !== ""
-      );
-      const streamArgs = parsedData.slice(parsedData.indexOf("streams") + 1);
+      const streamArgs = data.slice(data.indexOf("streams") + 1);
       let streamReadResponse = [];
-      if (splitData[4].toLowerCase() === "block") {
-        if (Number(splitData[6]) != 0) {
+      if (data[1] === "block") {
+        const time = Number(data[2]);
+        if (time != 0) {
           return new Promise((resolve) => {
             setTimeout(() => {
               const resp = readStream(streamArgs);
@@ -309,12 +224,12 @@ export function requestHandler(data, config) {
               } else {
                 resolve({ type: "null", data: "-1" });
               }
-            }, Number(splitData[6]));
+            }, time);
           });
         } else {
           block.isActive = true;
-          block.streams = streamArgs;
-          block.newOnly = parsedData.includes("$");
+          block.streamArgs = streamArgs;
+          block.newOnly = data.includes("$");
         }
         return block;
       } else {
