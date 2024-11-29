@@ -243,6 +243,8 @@ export function requestHandler(data) {
           return { type: "null", data: "-1" };
         }
       }
+    case "multi":
+      return { type: "simple", data: "OK" };
     default:
       console.log(`Received: ${data.toString()}`);
       return {
