@@ -401,6 +401,9 @@ export function responseHandler(response, conn) {
             response.data[i].data.toString().length
           }\r\n${response.data[i].data.toString()}\r\n`;
         }
+        if (response.data[i].type === "error") {
+          execResponseString += `-ERR ${response.data[i].data.description}\r\n`;
+        }
       }
       conn.write(execResponseString);
       break;
