@@ -122,14 +122,17 @@ export function requestHandler(data, config) {
       const keyIncr = splitData[4];
       const kvp = store.find((data) => data.key === keyIncr);
       if (kvp) {
-        if (typeof kvp.value === "number") {
+        if (!isNaN(kvp.value)) {
           store = [
             ...store.filter((data) => data.key != keyIncr),
             { ...kvp, value: Number(kvp.value) + 1 },
           ];
-          return { type: "int", data: keyValuePair.value };
+          return { type: "int", data: Number(kvp.value) + 1 };
         } else {
-          return { type: "error", data: "-ERR" };
+          return {
+            type: "error",
+            data: { code: "E3", description: "Not an interger" },
+          };
         }
       } else {
         store.push({ key: keyIncr, value: 1 });
