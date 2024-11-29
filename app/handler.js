@@ -30,11 +30,24 @@ let store = [];
 /** @type {Stream[]} */
 let streams = [];
 
-function readStream(splitData) {
-  let parsedData = splitData.filter(
-    (data) => !data.startsWith("*") && !data.startsWith("$") && data !== ""
-  );
-  const streamArgs = parsedData.slice(parsedData.indexOf("streams") + 1);
+const block = {
+  isActive: false,
+  streams: null,
+  conn: null,
+  newOnly: false,
+};
+
+/**
+ * @typedef {Object} Response
+ * @property {string} type
+ * @property {Object} data
+ */
+
+/**
+ * @param {string[]} streamArgs
+ * @returns {Response}
+ */
+function readStream(streamArgs, newOnly = false) {
   const streamKeysLength = streamArgs.length / 2;
   const streamKeysAndIds = [];
   const streamReadResponse = [];
@@ -48,7 +61,11 @@ function readStream(splitData) {
     let readValue;
     const stream = streams.find((stream) => stream.streamKey === keyAndId.key);
     if (stream) {
-      const readIdSplit = keyAndId.id.split("-");
+      let readIdSplit;
+      readValue = stream.stream.filter(
+        (stream) => stream.streamId >= keyAndId.id
+      );
+      readIdSplit = keyAndId.id.split("-");
       readValue = stream.stream.filter(
         (stream) =>
           Number(stream.streamId.split("-")[0]) >= Number(readIdSplit[0])
@@ -56,6 +73,9 @@ function readStream(splitData) {
       if (readIdSplit[1]) {
         readValue = readValue.filter(
           (stream) =>
+            (newOnly &&
+              Number(stream.streamId.split("-")[1]) >=
+                Number(readIdSplit[1])) ||
             Number(stream.streamId.split("-")[1]) > Number(readIdSplit[1])
         );
       }
@@ -68,9 +88,13 @@ function readStream(splitData) {
   return streamReadResponse;
 }
 
+/**
+ * @param {Buffer} data
+ * @param {*} config
+ * @returns
+ */
 export function requestHandler(data, config) {
   const splitData = data.toString().split("\r\n");
-
   const command = splitData[2];
 
   switch (command.toLowerCase()) {
@@ -198,6 +222,17 @@ export function requestHandler(data, config) {
           stream: [...stream.stream, { streamId: newStreamId, streamData }],
         });
       }
+      if (block.isActive && block.streams.includes(streamKey)) {
+        const blockReadResponse = readStream(
+          block.newOnly ? [streamKey, newStreamId] : block.streams,
+          block.newOnly
+        );
+        responseHandler({ type: "xread", data: blockReadResponse }, block.conn);
+        block.isActive = false;
+        block.streams = null;
+        block.newOnly = false;
+        block.conn = null;
+      }
       return { type: "bulk", data: newStreamId };
     case "xrange":
       const streamRangeKey = splitData[4];
@@ -239,32 +274,31 @@ export function requestHandler(data, config) {
         return { type: "null", data: "-1" };
       }
     case "xread":
+      let parsedData = splitData.filter(
+        (data) => !data.startsWith("*") && !/\$[0-9]+/.test(data) && data !== ""
+      );
+      const streamArgs = parsedData.slice(parsedData.indexOf("streams") + 1);
       let streamReadResponse = [];
       if (splitData[4].toLowerCase() === "block") {
-        return new Promise((resolve) => {
-          if (Number(splitData[6]) === 0) {
-            const pollStream = () => {
-              const resp = readStream(splitData);
-              if (resp[0] && resp.some((srr) => srr.stream[0])) {
-                resolve({ type: "xread", data: resp });
-              } else {
-                setTimeout(pollStream, 100);
-              }
-            };
-            pollStream();
-          } else {
+        if (Number(splitData[6]) != 0) {
+          return new Promise((resolve) => {
             setTimeout(() => {
-              const resp = readStream(splitData);
+              const resp = readStream(streamArgs);
               if (resp[0] && resp.some((srr) => srr.stream[0])) {
                 resolve({ type: "xread", data: resp });
               } else {
                 resolve({ type: "null", data: "-1" });
               }
             }, Number(splitData[6]));
-          }
-        });
+          });
+        } else {
+          block.isActive = true;
+          block.streams = streamArgs;
+          block.newOnly = parsedData.includes("$");
+        }
+        return block;
       } else {
-        streamReadResponse = readStream(splitData);
+        streamReadResponse = readStream(streamArgs);
         if (
           streamReadResponse[0] &&
           streamReadResponse.every((srr) => srr.stream[0])
@@ -282,12 +316,6 @@ export function requestHandler(data, config) {
       };
   }
 }
-
-/**
- * @typedef {Object} Response
- * @property {string} type
- * @property {Object} data
- */
 
 /**
  *
@@ -356,25 +384,6 @@ export function responseHandler(response, conn) {
         }
       }
       conn.write(readResponseString);
-      break;
-    default:
-      let respString;
-      if (typeof response == "object") {
-        respString = `*1\r\n*2\r\n$${response["streamKey"].length}\r\n${response["streamKey"]}\r\n`;
-        for (let i = 0; i < response["stream"].length; i++) {
-          respString = `${respString}*1\r\n*2\r\n$${
-            response["stream"][i]["streamId"].length
-          }\r\n${response["stream"][i]["streamId"]}\r\n*${
-            response["stream"][i]["streamData"].length * 2
-          }\r\n`;
-          for (let j = 0; j < response["stream"][i]["streamData"].length; j++) {
-            respString = `${respString}$${response["stream"][i]["streamData"][j]["key"].length}\r\n${response["stream"][i]["streamData"][j]["key"]}\r\n$${response["stream"][i]["streamData"][j]["value"].length}\r\n${response["stream"][i]["streamData"][j]["value"]}\r\n`;
-          }
-        }
-      } else {
-        respString = `$${response.length}\r\n${response}\r\n`;
-      }
-      conn.write(respString);
       break;
   }
 }

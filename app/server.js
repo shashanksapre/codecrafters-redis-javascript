@@ -55,7 +55,9 @@ const createRedisServer = (config) => {
           break;
         default:
           const response = requestHandler(data, config);
-          if (response instanceof Promise) {
+          if (response.isActive) {
+            response.conn = conn;
+          } else if (response instanceof Promise) {
             response.then((val) => {
               responseHandler(val, conn);
             });
@@ -66,9 +68,6 @@ const createRedisServer = (config) => {
                 config.replicaList[i].conn.write(data);
                 config.replicaList[i].ack = 0;
               }
-              // for (const replicaConn of config.replicaList) {
-              //   replicaConn.write(data);
-              // }
             }
             responseHandler(response, conn);
           }
