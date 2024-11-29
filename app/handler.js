@@ -15,7 +15,11 @@ import multi from "./data/multi.js";
  */
 export function requestHandler(data, conn) {
   const command = data[0];
-  if (multi.isActive && multi.conn === conn && command !== "exec") {
+  if (
+    multi.isActive &&
+    multi.conn === conn &&
+    !["exec", "discard"].includes(command)
+  ) {
     multi.queue.push({ conn, data });
     return { type: "simple", data: "QUEUED" };
   } else {
@@ -285,6 +289,18 @@ export function requestHandler(data, conn) {
           return {
             type: "error",
             data: { code: "E4", description: "EXEC without MULTI" },
+          };
+        }
+      case "discard":
+        if (multi.isActive && multi.conn === conn) {
+          multi.isActive = false;
+          multi.conn = null;
+          multi.queue = [];
+          return { type: "simple", data: "OK" };
+        } else {
+          return {
+            type: "error",
+            data: { code: "E6", description: "DISCARD without MULTI" },
           };
         }
       default:
