@@ -118,6 +118,23 @@ export function requestHandler(data, config) {
         store.push({ key, value });
       }
       return { type: "simple", data: "OK" };
+    case "incr":
+      const keyIncr = splitData[4];
+      const kvp = store.find((data) => data.key === keyIncr);
+      if (kvp) {
+        if (typeof kvp.value === "number") {
+          store = [
+            ...store.filter((data) => data.key != keyIncr),
+            { ...kvp, value: Number(kvp.value) + 1 },
+          ];
+          return { type: "int", data: keyValuePair.value };
+        } else {
+          return { type: "error", data: "-ERR" };
+        }
+      } else {
+        store.push({ key: keyIncr, value: 1 });
+        return { type: "int", data: 1 };
+      }
     case "get":
       const keySearch = splitData[4];
       const keyValuePair = store.find((data) => data.key === keySearch);
@@ -329,6 +346,9 @@ export function responseHandler(response, conn) {
       break;
     case "bulk":
       conn.write(`$${response.data.length}\r\n${response.data}\r\n`);
+      break;
+    case "int":
+      conn.write(`:${response.data}\r\n`);
       break;
     case "null":
       conn.write("$-1\r\n");
