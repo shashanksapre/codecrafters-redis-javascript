@@ -13,7 +13,7 @@ import multi from "./data/multi.js";
  */
 export function requestHandler(data, conn) {
   const command = data[0];
-  if (multi.isActive) {
+  if (multi.isActive && command != "exec") {
     multi.queue.push({ conn, data });
     return { type: "simple", data: "QUEUED" };
   } else {
@@ -260,6 +260,10 @@ export function requestHandler(data, conn) {
         return { type: "simple", data: "OK" };
       case "exec":
         if (multi.isActive) {
+          if (multi.queue.length < 1) {
+            multi.isActive = false;
+            return { type: "empty", data: "0" };
+          }
           for (const item of multi.queue) {
             const resp = requestHandler(item.data);
             responseHandler(resp, item.conn);
@@ -299,6 +303,9 @@ export function responseHandler(response, conn) {
       break;
     case "null":
       conn.write("$-1\r\n");
+      break;
+    case "empty":
+      conn.write("*0\r\n");
       break;
     case "error":
       conn.write(`-ERR ${response.data.description}\r\n`);
