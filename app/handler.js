@@ -125,7 +125,7 @@ export function requestHandler(data, config) {
         if (!isNaN(kvp.value)) {
           store = [
             ...store.filter((data) => data.key != keyIncr),
-            { ...kvp, value: Number(kvp.value) + 1 },
+            { ...kvp, value: (Number(kvp.value) + 1).toString() },
           ];
           return { type: "int", data: Number(kvp.value) + 1 };
         } else {
@@ -135,7 +135,7 @@ export function requestHandler(data, config) {
           };
         }
       } else {
-        store.push({ key: keyIncr, value: 1 });
+        store.push({ key: keyIncr, value: "1" });
         return { type: "int", data: 1 };
       }
     case "get":
