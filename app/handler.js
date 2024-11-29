@@ -15,12 +15,9 @@ import multi from "./data/multi.js";
  */
 export function requestHandler(data, conn) {
   const command = data[0];
-  if (
-    multi.isActive &&
-    multi.conn === conn &&
-    !["exec", "discard"].includes(command)
-  ) {
-    multi.queue.push({ conn, data });
+  const client = multi.getClient(conn);
+  if (client?.isActive && !["exec", "discard"].includes(command)) {
+    client.queue.push({ conn, data });
     return { type: "simple", data: "QUEUED" };
   } else {
     switch (command) {
@@ -262,28 +259,26 @@ export function requestHandler(data, conn) {
           }
         }
       case "multi":
-        if (multi.isActive && multi.conn !== conn) {
+        if (multi.getClient(conn)?.isActive) {
           return {
             type: "error",
             data: { code: "E5", description: "MULTI nested" },
           };
         }
-        multi.isActive = true;
-        multi.conn = conn; // Store the connection that started MULTI
+        multi.addClient(conn);
         return { type: "simple", data: "OK" };
       case "exec":
-        if (multi.isActive && multi.conn === conn) {
-          if (multi.queue.length < 1) {
-            multi.isActive = false;
-            multi.conn = null; // Clear the connection
+        const currentClient = multi.getClient(conn);
+        if (currentClient?.isActive) {
+          if (currentClient.queue.length < 1) {
+            multi.removeClient(conn);
             return { type: "empty", data: "0" };
           }
           const resp = [];
-          multi.isActive = false;
-          for (const item of multi.queue) {
-            resp.push(requestHandler(item.data, item.conn));
+          for (const item of currentClient.queue) {
+            resp.push(requestHandler(item.data, currentClient));
           }
-          multi.conn = null; // Clear the connection
+          multi.removeClient(conn);
           return { type: "exec", data: resp };
         } else {
           return {
@@ -292,10 +287,8 @@ export function requestHandler(data, conn) {
           };
         }
       case "discard":
-        if (multi.isActive && multi.conn === conn) {
-          multi.isActive = false;
-          multi.conn = null;
-          multi.queue = [];
+        if (multi.getClient(conn)?.isActive) {
+          multi.removeClient(conn);
           return { type: "simple", data: "OK" };
         } else {
           return {
