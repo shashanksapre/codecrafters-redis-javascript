@@ -32,11 +32,8 @@ export function requestHandler(data, conn) {
         const extra = data[3];
 
         if (extra && extra === "px") {
-          const time = Number(data[4]);
-          store.data.push({ key, value });
-          setTimeout(() => {
-            store.data = store.data.filter((pair) => pair.key !== key);
-          }, time);
+          const expiration = Date.now() + Number(data[4]);
+          store.data.push({ key, value, expiration });
         } else {
           store.data.push({ key, value });
         }
@@ -73,7 +70,12 @@ export function requestHandler(data, conn) {
         const keySearch = data[1];
         const keyValuePair = store.data.find((data) => data.key === keySearch);
         if (keyValuePair) {
-          return { type: "bulk", data: keyValuePair.value };
+          if (keyValuePair.expiration && keyValuePair.expiration < Date.now()) {
+            store.data = store.data.filter((pair) => pair.key !== keySearch);
+            return { type: "null", data: "-1" };
+          } else {
+            return { type: "bulk", data: keyValuePair.value };
+          }
         } else {
           return { type: "null", data: "-1" };
         }

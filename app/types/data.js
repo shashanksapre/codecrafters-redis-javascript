@@ -4,6 +4,7 @@
  * @typedef {Object} StoreData
  * @property {string} key - key
  * @property {string} value - value
+ * @property {number} expiration
  */
 
 /**

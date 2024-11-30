@@ -42,10 +42,11 @@ export function rdbFileToStore(rdbFile) {
       // Save data to store with expiry in seconds
       i++;
       let expirationBuffer = Buffer.alloc(4);
-      for (let x = 3; x >= 0; x--) {
+      for (let x = 0; x <= 3; x++) {
         expirationBuffer[x] = rdbFile[i];
         i++;
       }
+      const expiration = Number(expirationBuffer.readBigUInt64LE()) * 1000;
       i++; // skip type
       const key = getNextBytes(i, rdbFile);
       i = key.offset;
@@ -54,20 +55,17 @@ export function rdbFileToStore(rdbFile) {
       store.data.push({
         key: key.nextBytes.toString(),
         value: value.nextBytes.toString(),
+        expiration,
       });
-      const timeout = Number(expirationBuffer.toString()) - Date.now() / 1000;
-      console.log(key, timeout);
-      setTimeout(() => {
-        store.data = store.data.filter((d) => d.key != key);
-      }, timeout);
     } else if (rdbFile[i] === 0xfc) {
       // Save data to store with expiry in milliseconds
       i++;
       let expirationBuffer = Buffer.alloc(8);
-      for (let x = 7; x >= 0; x--) {
+      for (let x = 0; x <= 7; x++) {
         expirationBuffer[x] = rdbFile[i];
         i++;
       }
+      const expiration = Number(expirationBuffer.readBigUInt64LE());
       i++; // skip type
       const key = getNextBytes(i, rdbFile);
       i = key.offset;
@@ -76,12 +74,8 @@ export function rdbFileToStore(rdbFile) {
       store.data.push({
         key: key.nextBytes.toString(),
         value: value.nextBytes.toString(),
+        expiration,
       });
-      const timeout = Number(expirationBuffer.toString()) - Date.now();
-      console.log(key, timeout);
-      setTimeout(() => {
-        store.data = store.data.filter((d) => d.key != key);
-      }, timeout);
     } else {
       // Save data to store
       i++; // Skipping type check for now.
