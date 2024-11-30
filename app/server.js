@@ -1,11 +1,25 @@
 import { createServer, createConnection } from "node:net";
+import fs from "node:fs";
+import { join } from "node:path";
 
 import { parseRequest, parseSlaveRequest } from "./utils/parser.js";
 import { requestHandler, responseHandler } from "./handler.js";
+import { rdbFileToStore } from "./services/store.js";
 
 const createRedisServer = (config) => {
-  const rdbFile =
-    "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==";
+  let rdbFile;
+  const filePath = join(config.dir, config.dbfilename);
+  if (config.dir && config.dbfilename && fs.existsSync(filePath)) {
+    rdbFile = fs.readFileSync(filePath);
+    // load file to store
+    rdbFileToStore(rdbFile);
+  } else {
+    rdbFile = Buffer.from(
+      "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==" +
+        "\r\n",
+      "base64"
+    );
+  }
   const server = createServer((conn) => {
     conn.on("data", (data) => {
       const parsedData = parseRequest(data);
@@ -45,10 +59,12 @@ const createRedisServer = (config) => {
           }
           break;
         case "psync":
-          const rdbFileBuffer = Buffer.from(rdbFile + "\r\n", "base64");
+          // const rdbFileBuffer = Buffer.from(rdbFile + "\r\n", "base64");
           conn.write(`+FULLRESYNC ${config.replicationId} 0\r\n`);
-          conn.write(`$${rdbFileBuffer.length.toString()}\r\n`);
-          conn.write(rdbFileBuffer);
+          // conn.write(`$${rdbFileBuffer.length.toString()}\r\n`);
+          // conn.write(rdbFileBuffer);
+          conn.write(`$${rdbFile.length.toString()}\r\n`);
+          conn.write(rdbFile);
           // conn.write("\r\n");
           // config.replicaList.push(conn);
           config.replicaList.push({ conn, ack: 0 });

@@ -5,7 +5,7 @@ import "./types/io.js";
 import store from "./data/store.js";
 import streams from "./data/streams.js";
 import block from "./data/block.js";
-import { readStream } from "./serivices/stream.js";
+import { readStream } from "./services/stream.js";
 import multi from "./data/multi.js";
 
 /**
@@ -63,6 +63,11 @@ export function requestHandler(data, conn) {
         } else {
           store.data.push({ key: keyIncr, value: "1" });
           return { type: "int", data: 1 };
+        }
+      case "keys":
+        const searchParam = data[1];
+        if (searchParam === "*") {
+          return { type: "keys", data: store.data.map((d) => d.key) };
         }
       case "get":
         const keySearch = data[1];
@@ -330,6 +335,13 @@ export function responseHandler(response, conn) {
       break;
     case "error":
       conn.write(`-ERR ${response.data.description}\r\n`);
+      break;
+    case "keys":
+      let keysResponseString = `*${response.data.length}\r\n`;
+      for (const key of response.data) {
+        keysResponseString += `$${key.length}\r\n${key}\r\n`;
+      }
+      conn.write(keysResponseString);
       break;
     case "xrange":
       let xrangeResponse = response.data;
